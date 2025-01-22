@@ -1,0 +1,90 @@
+# ViewBag and ViewData in ASP.NET MVC
+
+In ASP.NET MVC, **ViewBag** and **ViewData** are used to pass data from a controller to a view. While they serve the same purpose, they have key differences in their implementation and usage.
+
+---
+
+## **1. ViewData**
+
+### **Definition:**
+- `ViewData` is a dictionary of objects used to pass data from a controller to a view.
+- It is derived from the `ViewDataDictionary` class.
+- It requires typecasting and null checks before use.
+
+### **Usage:**
+- Data is stored in key-value pairs.
+- It is **not strongly typed**, so typecasting is necessary when retrieving values.
+
+### **Example:**
+
+#### **Controller:**
+```csharp
+public ActionResult Index()
+{
+    ViewData["Message"] = "Hello from ViewData";
+    return View();
+}
+```
+
+#### **View (Index.cshtml):**
+```html
+<h2>@ViewData["Message"]</h2>
+```
+
+### **Key Points:**
+- Stores data in a dictionary format.
+- Requires typecasting while retrieving data.
+- Data is available **only for the current request**.
+
+---
+
+## **2. ViewBag**
+
+### **Definition:**
+- `ViewBag` is a dynamic wrapper around `ViewData`, allowing dynamic property access.
+- It is a **dynamic object** and does not require typecasting.
+
+### **Usage:**
+- Uses dynamic properties instead of dictionary keys.
+
+### **Example:**
+
+#### **Controller:**
+```csharp
+public ActionResult Index()
+{
+    ViewBag.Message = "Hello from ViewBag";
+    return View();
+}
+```
+
+#### **View (Index.cshtml):**
+```html
+<h2>@ViewBag.Message</h2>
+```
+
+### **Key Points:**
+- Uses dynamic properties instead of dictionary syntax.
+- No need for typecasting.
+- Data is available only during the current request.
+- Internally, `ViewBag` uses `ViewData`, but provides a simpler syntax.
+
+---
+
+## **3. Differences Between ViewData and ViewBag**
+
+| Feature       | ViewData | ViewBag |
+|--------------|---------|---------|
+| Data Type    | Dictionary (`ViewDataDictionary`) | Dynamic object |
+| Syntax       | Key-value pair (`ViewData["key"]`) | Dynamic property (`ViewBag.Key`) |
+| Typecasting  | Required | Not required |
+| Performance  | Slightly faster | Slightly slower due to dynamic property resolution |
+| Lifetime     | Available only for the current request | Available only for the current request |
+
+---
+
+## **4. When to Use What?**
+- Use **ViewBag** for a simpler syntax without typecasting.
+- Use **ViewData** if dictionary-like behavior is preferred.
+- Both are suitable for sending small amounts of data to the view.
+- For maintaining data across multiple requests, consider using `TempData` or `Session`.
