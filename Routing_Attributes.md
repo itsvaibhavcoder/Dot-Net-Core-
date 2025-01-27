@@ -1,4 +1,4 @@
-# Understanding `[Route("api/[controller]")]` and `[ApiController]` in ASP.NET Core
+# Understanding `Route("api/[controller]")` and `ApiController` in ASP.NET Core
 
 ## `[Route("api/[controller]")]` → Defines Routing
 This attribute **specifies the route** for the controller.
