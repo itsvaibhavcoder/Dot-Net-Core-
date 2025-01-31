@@ -1,50 +1,184 @@
-# Enabling JWT Authentication in Swagger for ASP.NET Core MVC
+# Authentication and Authorization Using JWT in .NET Core 3.1
 
-## **1️⃣ Install Swagger Package**
-Run the following command to install Swagger in your project:
+## Introduction
+In modern web applications, authentication and authorization are crucial for security. **Authentication** is verifying who a user is, while **authorization** determines what actions they are allowed to perform.
 
-```sh
-dotnet add package Swashbuckle.AspNetCore
+In .NET Core 3.1, **JWT (JSON Web Token)** is commonly used for secure authentication and authorization. **Swagger** is used for API documentation and testing.
+
+---
+
+## 1. JWT Authentication in .NET Core 3.1
+### 1.1 What is JWT?
+JWT is a secure token-based authentication mechanism that allows users to authenticate and securely access resources. It consists of three parts:
+- **Header** – Algorithm and token type
+- **Payload** – User claims
+- **Signature** – Ensures the token is untampered
+
+A JWT token looks like:
+```
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9
+.eyJzdWIiOiJ1c2VyMSIsImp0aSI6IjEyMyIsImV4cCI6MTY5MjEyMzAwMH0
+.cSxiMlOtxVVk-T82bLxXzLaE4ZhHhD2PMeLkW6tQ9Mw
 ```
 
 ---
 
-## **2️⃣ Configure Swagger in `Startup.cs`**
-Modify the `ConfigureServices` method to add JWT authentication support.
+## 2. Implementing JWT Authentication in .NET Core 3.1
+### 2.1 Install Required Packages
+```powershell
+dotnet add package Microsoft.AspNetCore.Authentication.JwtBearer
+```
 
-### **Modify `ConfigureServices`**
+### 2.2 Configure JWT in `appsettings.json`
+```json
+{
+  "JwtSettings": {
+    "Key": "YourSecretKeyHere",
+    "Issuer": "YourIssuer",
+    "Audience": "YourAudience"
+  }
+}
+```
+
+### 2.3 Configure JWT in `Startup.cs`
 ```csharp
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+
 public void ConfigureServices(IServiceCollection services)
 {
-    services.AddControllers();
+    var key = Encoding.ASCII.GetBytes(Configuration["JwtSettings:Key"]);
+    
+    services.AddAuthentication(x =>
+    {
+        x.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        x.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(x =>
+    {
+        x.RequireHttpsMetadata = false;
+        x.SaveToken = true;
+        x.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(key),
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidIssuer = Configuration["JwtSettings:Issuer"],
+            ValidAudience = Configuration["JwtSettings:Audience"]
+        };
+    });
 
-    // Register Swagger
+    services.AddControllers();
+}
+```
+
+### 2.4 Generate JWT Token
+```csharp
+public class TokenService
+{
+    private readonly IConfiguration _config;
+    
+    public TokenService(IConfiguration config)
+    {
+        _config = config;
+    }
+
+    public string GenerateToken(string username)
+    {
+        var tokenHandler = new JwtSecurityTokenHandler();
+        var key = Encoding.ASCII.GetBytes(_config["JwtSettings:Key"]);
+
+        var tokenDescriptor = new SecurityTokenDescriptor
+        {
+            Subject = new ClaimsIdentity(new Claim[]
+            {
+                new Claim(ClaimTypes.Name, username),
+                new Claim(ClaimTypes.Role, "Admin")
+            }),
+            Expires = DateTime.UtcNow.AddHours(1),
+            Issuer = _config["JwtSettings:Issuer"],
+            Audience = _config["JwtSettings:Audience"],
+            SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+        };
+
+        var token = tokenHandler.CreateToken(tokenDescriptor);
+        return tokenHandler.WriteToken(token);
+    }
+}
+```
+
+### 2.5 Login API Endpoint
+```csharp
+[Route("api/auth")]
+[ApiController]
+public class AuthController : ControllerBase
+{
+    private readonly TokenService _tokenService;
+
+    public AuthController(TokenService tokenService)
+    {
+        _tokenService = tokenService;
+    }
+
+    [HttpPost("login")]
+    public IActionResult Login([FromBody] UserLoginModel model)
+    {
+        if (model.Username == "admin" && model.Password == "password")
+        {
+            var token = _tokenService.GenerateToken(model.Username);
+            return Ok(new { Token = token });
+        }
+        return Unauthorized();
+    }
+}
+```
+
+### 2.6 Protecting API Endpoints
+```csharp
+[Authorize]
+[HttpGet("secure-data")]
+public IActionResult SecureData()
+{
+    return Ok(new { Message = "This is a protected API." });
+}
+```
+
+---
+
+## 3. Implementing Swagger in .NET Core 3.1
+### 3.1 Install Swagger NuGet Package
+```powershell
+dotnet add package Swashbuckle.AspNetCore
+```
+
+### 3.2 Configure Swagger in `Startup.cs`
+```csharp
+using Microsoft.OpenApi.Models;
+
+public void ConfigureServices(IServiceCollection services)
+{
     services.AddSwaggerGen(c =>
     {
-        c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
-        {
-            Title = "BookStore API",
-            Version = "v1"
-        });
+        c.SwaggerDoc("v1", new OpenApiInfo { Title = "JWT API", Version = "v1" });
 
-        // Add JWT Authentication to Swagger
-        c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+        c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
         {
-            Description = "Enter 'Bearer' [space] and then your valid token in the text input below.",
+            Description = "JWT Authorization header using the Bearer scheme. Example: 'Bearer {token}'",
             Name = "Authorization",
-            In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-            Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
-            Scheme = "Bearer"
+            In = ParameterLocation.Header,
+            Type = SecuritySchemeType.ApiKey
         });
 
-        c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+        c.AddSecurityRequirement(new OpenApiSecurityRequirement
         {
             {
-                new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+                new OpenApiSecurityScheme
                 {
-                    Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                    Reference = new OpenApiReference
                     {
-                        Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                        Type = ReferenceType.SecurityScheme,
                         Id = "Bearer"
                     }
                 },
@@ -52,53 +186,23 @@ public void ConfigureServices(IServiceCollection services)
             }
         });
     });
-
-    // Add Authentication
-    services.AddAuthentication("Bearer")
-        .AddJwtBearer("Bearer", options =>
-        {
-            options.RequireHttpsMetadata = false;
-            options.SaveToken = true;
-            options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
-            {
-                ValidateIssuerSigningKey = true,
-                IssuerSigningKey = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(
-                    System.Text.Encoding.UTF8.GetBytes("YourSuperSecretKey@123")), // Use the same key as in token generation
-                ValidateIssuer = false,
-                ValidateAudience = false
-            };
-        });
+    services.AddControllers();
 }
 ```
 
----
-
-## **3️⃣ Enable Swagger in `Configure` Method**
-Modify the `Configure` method in `Startup.cs`:
-
-### **Modify `Configure`**
+### 3.3 Enable Swagger in `Configure` Method
 ```csharp
 public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
 {
-    if (env.IsDevelopment())
-    {
-        app.UseDeveloperExceptionPage();
-    }
-
-    app.UseHttpsRedirection();
-    app.UseRouting();
-
-    app.UseAuthentication();  // Ensure authentication middleware is added before authorization
-    app.UseAuthorization();
-
-    // Enable Swagger
     app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "BookStore API V1");
-        c.RoutePrefix = string.Empty; // Access Swagger at the root URL (e.g., https://localhost:5001/)
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "JWT API V1");
     });
 
+    app.UseRouting();
+    app.UseAuthentication();
+    app.UseAuthorization();
     app.UseEndpoints(endpoints =>
     {
         endpoints.MapControllers();
@@ -106,31 +210,16 @@ public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
 }
 ```
 
----
-
-## **4️⃣ Run & Test in Swagger UI**
-1. **Run your API**
-   ```sh
-   dotnet run
-   ```
-2. **Open Swagger UI**
-   - Visit: **`https://localhost:5001/swagger`**
-   - You should see a **lock icon 🔒 or "Authorize" button** in the top right.
-
-3. **Authorize with Token**
-   - Click **"Authorize"** (🔑).
-   - Enter `Bearer <your_token_here>` (e.g., `Bearer eyJhbGciOiJIUzI1...`).
-   - Click **"Authorize"** and then close the window.
-
-4. **Make Authenticated Requests**
-   - Now, when calling a **protected endpoint** (e.g., `GET /api/cart`), the token will be automatically included.
+### 3.4 Testing JWT in Swagger
+1. Run the application.
+2. Open Swagger UI at `https://localhost:5001/swagger`
+3. Click **Authorize** and enter `Bearer <your-token>`
+4. Call secured APIs.
 
 ---
 
-## **🎯 Summary**
-✔ **Configured Swagger to accept JWT tokens.**  
-✔ **Added JWT authentication middleware.**  
-✔ **Enabled authentication for Swagger UI.**  
-✔ **Tested using the "Authorize" button in Swagger.** 🚀
-
-Let me know if you need any more help! 🔥
+## Conclusion
+- **JWT Authentication** allows users to securely authenticate and access APIs.
+- **Authorization** is controlled using roles and claims.
+- **Swagger** provides API documentation and testing capabilities.
+- **.NET Core 3.1** supports easy integration of JWT and Swagger.
